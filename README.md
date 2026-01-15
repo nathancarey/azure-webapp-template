@@ -4,14 +4,10 @@ Deploy a complete Azure App Service stack with monitoring and secrets management
 
 ## Quick Deploy
 
-<!--
-  UPDATE THIS URL: Replace YOUR_ORG/YOUR_REPO with your actual GitHub organization and repository name.
-  Example: https://raw.githubusercontent.com/contoso/azure-webapp/main/templates/azuredeploy.json
--->
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FYOUR_ORG%2FYOUR_REPO%2Fmain%2Ftemplates%2Fazuredeploy.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fnathancarey%2Fazure-webapp-template%2Fmaster%2Ftemplates%2Fazuredeploy.json)
 
-[![Visualize](https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/1-CONTRIBUTION-GUIDE/images/visualizebutton.svg?sanitize=true)](http://armviz.io/#/?load=https%3A%2F%2Fraw.githubusercontent.com%2FYOUR_ORG%2FYOUR_REPO%2Fmain%2Ftemplates%2Fazuredeploy.json)
+[![Visualize](https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/1-CONTRIBUTION-GUIDE/images/visualizebutton.svg?sanitize=true)](http://armviz.io/#/?load=https%3A%2F%2Fraw.githubusercontent.com%2Fnathancarey%2Fazure-webapp-template%2Fmaster%2Ftemplates%2Fazuredeploy.json)
 
 ## What Gets Deployed
 
@@ -114,7 +110,7 @@ When `enableAutoUpdate=true` and SKU is B1 or higher:
 ```bash
 az deployment group create \
   --resource-group <your-resource-group> \
-  --template-uri https://raw.githubusercontent.com/YOUR_ORG/YOUR_REPO/main/templates/azuredeploy.json \
+  --template-uri https://raw.githubusercontent.com/nathancarey/azure-webapp-template/master/templates/azuredeploy.json \
   --parameters appName=<your-app-name> \
                enableApplicationInsights=true \
                enableKeyVault=true
@@ -125,7 +121,7 @@ az deployment group create \
 ```powershell
 New-AzResourceGroupDeployment `
   -ResourceGroupName "<your-resource-group>" `
-  -TemplateUri "https://raw.githubusercontent.com/YOUR_ORG/YOUR_REPO/main/templates/azuredeploy.json" `
+  -TemplateUri "https://raw.githubusercontent.com/nathancarey/azure-webapp-template/master/templates/azuredeploy.json" `
   -appName "<your-app-name>" `
   -enableApplicationInsights $true `
   -enableKeyVault $true
@@ -135,7 +131,7 @@ New-AzResourceGroupDeployment `
 
 ```powershell
 # Clone and deploy locally
-git clone https://github.com/YOUR_ORG/YOUR_REPO.git
+git clone https://github.com/nathancarey/azure-webapp-template.git
 cd YOUR_REPO
 
 New-AzResourceGroupDeployment `
