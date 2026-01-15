@@ -1,0 +1,21 @@
+{
+  "$schema": "https://aka.ms/azure-quickstart-templates-metadata-schema#",
+  "type": "QuickStart",
+  "itemDisplayName": "Azure App Service with Application Insights and Key Vault",
+  "description": "Deploy an Azure App Service with configurable runtime stack, Application Insights monitoring, Key Vault secrets management, and optional staging slot for zero-downtime deployments.",
+  "summary": "Creates an App Service Plan, Web App with managed identity, Application Insights with Log Analytics, and Key Vault with RBAC authorization.",
+  "githubUsername": "YOUR_GITHUB_USERNAME",
+  "dateUpdated": "2025-01-15",
+  "environments": [
+    "AzureCloud",
+    "AzureUSGovernment"
+  ],
+  "services": [
+    "Microsoft.Web/serverfarms",
+    "Microsoft.Web/sites",
+    "Microsoft.Web/sites/slots",
+    "Microsoft.Insights/components",
+    "Microsoft.OperationalInsights/workspaces",
+    "Microsoft.KeyVault/vaults"
+  ]
+}

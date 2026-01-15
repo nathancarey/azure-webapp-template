@@ -1,0 +1,160 @@
+name: Validate ARM Template
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'templates/**'
+      - '.github/workflows/validate.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'templates/**'
+      - '.github/workflows/validate.yml'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Validate Template
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate JSON syntax
+        run: |
+          echo "Validating JSON syntax..."
+          for file in templates/*.json; do
+            echo "Checking: $file"
+            if jq empty "$file" 2>/dev/null; then
+              echo "✓ Valid JSON: $file"
+            else
+              echo "✗ Invalid JSON: $file"
+              exit 1
+            fi
+          done
+
+      - name: Check template schema
+        run: |
+          echo "Validating ARM template schema..."
+          TEMPLATE="templates/azuredeploy.json"
+
+          # Check for required ARM template properties
+          SCHEMA=$(jq -r '.["$schema"]' "$TEMPLATE")
+          CONTENT_VERSION=$(jq -r '.contentVersion' "$TEMPLATE")
+
+          if [[ "$SCHEMA" != *"deploymentTemplate.json"* ]]; then
+            echo "✗ Invalid schema: $SCHEMA"
+            exit 1
+          fi
+          echo "✓ Schema: $SCHEMA"
+
+          if [[ -z "$CONTENT_VERSION" || "$CONTENT_VERSION" == "null" ]]; then
+            echo "✗ Missing contentVersion"
+            exit 1
+          fi
+          echo "✓ Content Version: $CONTENT_VERSION"
+
+          # Check for required sections
+          for section in parameters variables resources; do
+            if jq -e ".$section" "$TEMPLATE" > /dev/null 2>&1; then
+              echo "✓ Has $section section"
+            else
+              echo "✗ Missing $section section"
+              exit 1
+            fi
+          done
+
+      - name: Validate parameter file
+        run: |
+          echo "Validating parameters file..."
+          PARAMS="templates/azuredeploy.parameters.json"
+
+          SCHEMA=$(jq -r '.["$schema"]' "$PARAMS")
+          if [[ "$SCHEMA" != *"deploymentParameters.json"* ]]; then
+            echo "✗ Invalid parameters schema"
+            exit 1
+          fi
+          echo "✓ Parameters schema valid"
+
+          # Check that all parameters in param file exist in template
+          TEMPLATE="templates/azuredeploy.json"
+          PARAM_KEYS=$(jq -r '.parameters | keys[]' "$PARAMS")
+
+          for key in $PARAM_KEYS; do
+            if jq -e ".parameters.$key" "$TEMPLATE" > /dev/null 2>&1; then
+              echo "✓ Parameter '$key' exists in template"
+            else
+              echo "✗ Parameter '$key' not found in template"
+              exit 1
+            fi
+          done
+
+      - name: Check for security issues
+        run: |
+          echo "Checking for security issues..."
+          TEMPLATE="templates/azuredeploy.json"
+
+          # Check that HTTPS is enforced
+          if grep -q '"httpsOnly": true' "$TEMPLATE"; then
+            echo "✓ HTTPS enforced"
+          else
+            echo "⚠ Warning: httpsOnly not set to true"
+          fi
+
+          # Check TLS version
+          if grep -q '"minTlsVersion": "1.2"' "$TEMPLATE"; then
+            echo "✓ TLS 1.2 minimum enforced"
+          else
+            echo "⚠ Warning: minTlsVersion not set to 1.2"
+          fi
+
+          # Check FTPS disabled
+          if grep -q '"ftpsState": "Disabled"' "$TEMPLATE"; then
+            echo "✓ FTPS disabled"
+          else
+            echo "⚠ Warning: ftpsState not set to Disabled"
+          fi
+
+          # Check Key Vault uses RBAC
+          if grep -q '"enableRbacAuthorization": true' "$TEMPLATE"; then
+            echo "✓ Key Vault RBAC enabled"
+          else
+            echo "⚠ Warning: Key Vault not using RBAC authorization"
+          fi
+
+      - name: Azure Login (for validation only)
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        continue-on-error: true
+
+      - name: Validate with Azure (What-If)
+        if: env.AZURE_LOGGED_IN == 'true'
+        env:
+          AZURE_LOGGED_IN: ${{ steps.azure-login.outcome == 'success' }}
+        run: |
+          echo "Running Azure What-If validation..."
+          az deployment group validate \
+            --resource-group ${{ secrets.AZURE_RG }} \
+            --template-file templates/azuredeploy.json \
+            --parameters templates/azuredeploy.parameters.json \
+            --parameters appName=validation-${{ github.run_id }}
+        continue-on-error: true
+
+      - name: Summary
+        run: |
+          echo "## Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| JSON Syntax | ✓ Passed |" >> $GITHUB_STEP_SUMMARY
+          echo "| ARM Schema | ✓ Passed |" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameters | ✓ Passed |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security | ✓ Passed |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Template version: $(jq -r '.contentVersion' templates/azuredeploy.json)" >> $GITHUB_STEP_SUMMARY

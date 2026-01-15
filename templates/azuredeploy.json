@@ -1,0 +1,357 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.1.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "ARM Template",
+      "version": "1.1.0.0"
+    },
+    "description": "Deploys an Azure App Service with App Service Plan, Application Insights, and Key Vault"
+  },
+  "parameters": {
+    "appName": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 60,
+      "metadata": {
+        "description": "Name of the web app. Must be globally unique."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Location for all resources."
+      }
+    },
+    "sku": {
+      "type": "string",
+      "defaultValue": "B1",
+      "allowedValues": [
+        "F1",
+        "B1",
+        "B2",
+        "B3",
+        "S1",
+        "S2",
+        "S3",
+        "P1v2",
+        "P2v2",
+        "P3v2",
+        "P1v3",
+        "P2v3",
+        "P3v3"
+      ],
+      "metadata": {
+        "description": "The SKU of App Service Plan."
+      }
+    },
+    "linuxFxVersion": {
+      "type": "string",
+      "defaultValue": "DOTNETCORE|8.0",
+      "allowedValues": [
+        "DOTNETCORE|8.0",
+        "DOTNETCORE|7.0",
+        "NODE|20-lts",
+        "NODE|18-lts",
+        "PYTHON|3.12",
+        "PYTHON|3.11",
+        "PHP|8.2",
+        "JAVA|17-java17",
+        "JAVA|11-java11"
+      ],
+      "metadata": {
+        "description": "The runtime stack of the web app."
+      }
+    },
+    "enableAutoUpdate": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enable deployment slots for blue-green deployments and auto-updates."
+      }
+    },
+    "enableApplicationInsights": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enable Application Insights for monitoring and diagnostics."
+      }
+    },
+    "enableKeyVault": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enable Key Vault for secrets management."
+      }
+    },
+    "keyVaultSku": {
+      "type": "string",
+      "defaultValue": "standard",
+      "allowedValues": [
+        "standard",
+        "premium"
+      ],
+      "metadata": {
+        "description": "Key Vault SKU. Premium enables HSM-backed keys."
+      }
+    },
+    "logRetentionDays": {
+      "type": "int",
+      "defaultValue": 30,
+      "minValue": 7,
+      "maxValue": 730,
+      "metadata": {
+        "description": "Number of days to retain logs in Log Analytics."
+      }
+    }
+  },
+  "variables": {
+    "appServicePlanName": "[format('asp-{0}', parameters('appName'))]",
+    "webAppName": "[format('app-{0}', parameters('appName'))]",
+    "stagingSlotName": "staging",
+    "appInsightsName": "[format('appi-{0}', parameters('appName'))]",
+    "logAnalyticsName": "[format('log-{0}', parameters('appName'))]",
+    "keyVaultName": "[format('kv-{0}', take(uniqueString(resourceGroup().id, parameters('appName')), 14))]",
+    "tenantId": "[subscription().tenantId]"
+  },
+  "resources": [
+    {
+      "condition": "[parameters('enableApplicationInsights')]",
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2022-10-01",
+      "name": "[variables('logAnalyticsName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "sku": {
+          "name": "PerGB2018"
+        },
+        "retentionInDays": "[parameters('logRetentionDays')]",
+        "features": {
+          "enableLogAccessUsingOnlyResourcePermissions": true
+        },
+        "workspaceCapping": {
+          "dailyQuotaGb": -1
+        }
+      },
+      "tags": {
+        "displayName": "Log Analytics Workspace",
+        "deployedBy": "ARM-1Click"
+      }
+    },
+    {
+      "condition": "[parameters('enableApplicationInsights')]",
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[variables('appInsightsName')]",
+      "location": "[parameters('location')]",
+      "kind": "web",
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+      ],
+      "properties": {
+        "Application_Type": "web",
+        "WorkspaceResourceId": "[if(parameters('enableApplicationInsights'), resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName')), null())]",
+        "IngestionMode": "LogAnalytics",
+        "publicNetworkAccessForIngestion": "Enabled",
+        "publicNetworkAccessForQuery": "Enabled",
+        "RetentionInDays": "[parameters('logRetentionDays')]"
+      },
+      "tags": {
+        "displayName": "Application Insights",
+        "deployedBy": "ARM-1Click"
+      }
+    },
+    {
+      "condition": "[parameters('enableKeyVault')]",
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2023-07-01",
+      "name": "[variables('keyVaultName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "tenantId": "[variables('tenantId')]",
+        "sku": {
+          "family": "A",
+          "name": "[parameters('keyVaultSku')]"
+        },
+        "enableRbacAuthorization": true,
+        "enableSoftDelete": true,
+        "softDeleteRetentionInDays": 90,
+        "enablePurgeProtection": true,
+        "publicNetworkAccess": "Enabled",
+        "networkAcls": {
+          "bypass": "AzureServices",
+          "defaultAction": "Allow"
+        }
+      },
+      "tags": {
+        "displayName": "Key Vault",
+        "deployedBy": "ARM-1Click"
+      }
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2022-09-01",
+      "name": "[variables('appServicePlanName')]",
+      "location": "[parameters('location')]",
+      "kind": "linux",
+      "sku": {
+        "name": "[parameters('sku')]"
+      },
+      "properties": {
+        "reserved": true
+      },
+      "tags": {
+        "displayName": "App Service Plan",
+        "deployedBy": "ARM-1Click"
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2022-09-01",
+      "name": "[variables('webAppName')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+        "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]",
+        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]"
+      ],
+      "kind": "app,linux",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+        "httpsOnly": true,
+        "siteConfig": {
+          "linuxFxVersion": "[parameters('linuxFxVersion')]",
+          "minTlsVersion": "1.2",
+          "ftpsState": "Disabled",
+          "alwaysOn": "[if(equals(parameters('sku'), 'F1'), false(), true())]",
+          "appSettings": "[concat(
+            createArray(
+              createObject('name', 'WEBSITE_RUN_FROM_PACKAGE', 'value', '1'),
+              createObject('name', 'TEMPLATE_VERSION', 'value', deployment().properties.template.contentVersion)
+            ),
+            if(parameters('enableApplicationInsights'),
+              createArray(
+                createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString),
+                createObject('name', 'ApplicationInsightsAgent_EXTENSION_VERSION', 'value', '~3'),
+                createObject('name', 'XDT_MicrosoftApplicationInsights_Mode', 'value', 'Recommended')
+              ),
+              createArray()
+            ),
+            if(parameters('enableKeyVault'),
+              createArray(
+                createObject('name', 'KEY_VAULT_NAME', 'value', variables('keyVaultName')),
+                createObject('name', 'KEY_VAULT_URI', 'value', format('https://{0}.vault.azure.net/', variables('keyVaultName')))
+              ),
+              createArray()
+            )
+          )]"
+        },
+        "keyVaultReferenceIdentity": "SystemAssigned"
+      },
+      "tags": {
+        "displayName": "Web App",
+        "deployedBy": "ARM-1Click"
+      }
+    },
+    {
+      "condition": "[parameters('enableKeyVault')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(resourceGroup().id, variables('webAppName'), 'KeyVaultSecretsUser')]",
+      "scope": "[format('Microsoft.KeyVault/vaults/{0}', variables('keyVaultName'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]",
+        "[resourceId('Microsoft.Web/sites', variables('webAppName'))]"
+      ],
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]",
+        "principalId": "[reference(resourceId('Microsoft.Web/sites', variables('webAppName')), '2022-09-01', 'Full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      }
+    },
+    {
+      "condition": "[and(parameters('enableAutoUpdate'), not(equals(parameters('sku'), 'F1')))]",
+      "type": "Microsoft.Web/sites/slots",
+      "apiVersion": "2022-09-01",
+      "name": "[format('{0}/{1}', variables('webAppName'), variables('stagingSlotName'))]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('webAppName'))]"
+      ],
+      "kind": "app,linux",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+        "httpsOnly": true,
+        "siteConfig": {
+          "linuxFxVersion": "[parameters('linuxFxVersion')]",
+          "minTlsVersion": "1.2",
+          "ftpsState": "Disabled",
+          "autoSwapSlotName": "production"
+        }
+      },
+      "tags": {
+        "displayName": "Staging Slot",
+        "deployedBy": "ARM-1Click"
+      }
+    }
+  ],
+  "outputs": {
+    "webAppName": {
+      "type": "string",
+      "value": "[variables('webAppName')]"
+    },
+    "webAppUrl": {
+      "type": "string",
+      "value": "[format('https://{0}.azurewebsites.net', variables('webAppName'))]"
+    },
+    "webAppPrincipalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Web/sites', variables('webAppName')), '2022-09-01', 'Full').identity.principalId]"
+    },
+    "appServicePlanId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]"
+    },
+    "stagingSlotUrl": {
+      "type": "string",
+      "condition": "[and(parameters('enableAutoUpdate'), not(equals(parameters('sku'), 'F1')))]",
+      "value": "[format('https://{0}-{1}.azurewebsites.net', variables('webAppName'), variables('stagingSlotName'))]"
+    },
+    "applicationInsightsName": {
+      "type": "string",
+      "condition": "[parameters('enableApplicationInsights')]",
+      "value": "[variables('appInsightsName')]"
+    },
+    "applicationInsightsConnectionString": {
+      "type": "string",
+      "condition": "[parameters('enableApplicationInsights')]",
+      "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString]"
+    },
+    "logAnalyticsWorkspaceId": {
+      "type": "string",
+      "condition": "[parameters('enableApplicationInsights')]",
+      "value": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+    },
+    "keyVaultName": {
+      "type": "string",
+      "condition": "[parameters('enableKeyVault')]",
+      "value": "[variables('keyVaultName')]"
+    },
+    "keyVaultUri": {
+      "type": "string",
+      "condition": "[parameters('enableKeyVault')]",
+      "value": "[format('https://{0}.vault.azure.net/', variables('keyVaultName'))]"
+    },
+    "resourceGroupName": {
+      "type": "string",
+      "value": "[resourceGroup().name]"
+    }
+  }
+}
